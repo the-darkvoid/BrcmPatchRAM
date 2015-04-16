@@ -85,6 +85,7 @@ private:
 
     static void uploadFirmwareThread(void* arg, wait_result_t wait);
     thread_t mWorker = 0;
+    void *workerEvent;
 
     IOInterruptEventSource* mWorkSource = NULL;
     IOLock* mWorkLock = NULL;
