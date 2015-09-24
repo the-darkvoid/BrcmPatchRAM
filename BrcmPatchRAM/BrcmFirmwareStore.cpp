@@ -89,6 +89,7 @@ OSData* BrcmFirmwareStore::decompressFirmware(OSData* firmware)
         && *magic != 0xda78) // Zlib maximum compression
     {
         // Return the data as-is
+        firmware->retain();
         return firmware;
     }
     
@@ -320,6 +321,10 @@ bool BrcmFirmwareStore::start(IOService *provider)
     if (!mCompletionLock)
         return false;
 
+    mDataLock = IOLockAlloc();
+    if (!mDataLock)
+        return false;
+
     registerService();
 
     return true;
@@ -336,44 +341,50 @@ void BrcmFirmwareStore::stop(IOService *provider)
         IOLockFree(mCompletionLock);
         mCompletionLock = NULL;
     }
+
+    if (mDataLock)
+    {
+        IOLockFree(mDataLock);
+        mDataLock = NULL;
+    }
     
     super::stop(provider);
 }
 
-void BrcmFirmwareStore::requestResourceCallback(OSKextRequestTag requestTag, OSReturn result, const void * resourceData, uint32_t resourceDataLength, void* context)
+void BrcmFirmwareStore::requestResourceCallback(OSKextRequestTag requestTag, OSReturn result, const void * resourceData, uint32_t resourceDataLength, void* context1)
 {
-    BrcmFirmwareStore *me = (BrcmFirmwareStore*)context;
+    ResourceCallbackContext *context = (ResourceCallbackContext*)context1;
     
-    IOLockLock(me->mCompletionLock);
+    IOLockLock(context->me->mCompletionLock);
 
     if (kOSReturnSuccess == result)
     {
         DebugLog("OSKextRequestResource Callback: %d bytes of data.\n", resourceDataLength);
         
-        me->mFirmware = OSData::withBytes(resourceData, resourceDataLength);
+        context->firmware = OSData::withBytes(resourceData, resourceDataLength);
     }
     else
         DebugLog("OSKextRequestResource Callback: %08x.\n", result);
     
-    IOLockUnlock(me->mCompletionLock);
+    IOLockUnlock(context->me->mCompletionLock);
     
     // wake waiting task in performUpgrade (in IOLockSleep)...
-    IOLockWakeup(me->mCompletionLock, me, true);
+    IOLockWakeup(context->me->mCompletionLock, context->me, true);
 }
 
 OSData* BrcmFirmwareStore::loadFirmwareFile(const char* filename, const char* suffix)
 {
-    char path[PATH_MAX];
-    
     IOLockLock(mCompletionLock);
-    
-    mFirmware = NULL;
+
+    ResourceCallbackContext context = { .me = this, .firmware = NULL };
+
+    char path[PATH_MAX];
     snprintf(path, PATH_MAX, "%s.%s", filename, suffix);
     
     OSReturn ret = OSKextRequestResource(OSKextGetCurrentIdentifier(),
                           path,
                           requestResourceCallback,
-                          this,
+                          &context,
                           NULL);
     
     AlwaysLog("OSKextRequestResource: %08x\n", ret);
@@ -383,10 +394,10 @@ OSData* BrcmFirmwareStore::loadFirmwareFile(const char* filename, const char* su
     
     IOLockUnlock(mCompletionLock);
     
-    if (mFirmware)
+    if (context.firmware)
     {
         AlwaysLog("Loaded firmware \"%s\" from resources.\n", path);
-        return mFirmware;
+        return context.firmware;
     }
 
     return NULL;
@@ -394,15 +405,13 @@ OSData* BrcmFirmwareStore::loadFirmwareFile(const char* filename, const char* su
 
 OSData* BrcmFirmwareStore::loadFirmwareFiles(UInt16 vendorId, UInt16 productId, OSString* firmwareKey)
 {
-    OSData* result = NULL;
     char filename[PATH_MAX];
-    
     snprintf(filename, PATH_MAX, "%04x_%04x", vendorId, productId);
 
-    result = loadFirmwareFile(filename, kBrcmFirmwareCompressed);
+    OSData* result = loadFirmwareFile(filename, kBrcmFirmwareCompressed);
 
     if (!result)
-        loadFirmwareFile(filename, kBrmcmFirwareUncompressed);
+        result = loadFirmwareFile(filename, kBrmcmFirwareUncompressed);
 
     if (!result)
         result = loadFirmwareFile(firmwareKey->getCStringNoCopy(), kBrcmFirmwareCompressed);
@@ -417,10 +426,8 @@ OSArray* BrcmFirmwareStore::loadFirmware(UInt16 vendorId, UInt16 productId, OSSt
 {
     DebugLog("loadFirmware\n");
     
-    OSData* configuredData = NULL;
-    
     // First try to load firmware from disk
-    configuredData = loadFirmwareFiles(vendorId, productId, firmwareKey);
+    OSData* configuredData = loadFirmwareFiles(vendorId, productId, firmwareKey);
     
     // Next try to load firmware from configuration
     if (!configuredData)
@@ -436,7 +443,10 @@ OSArray* BrcmFirmwareStore::loadFirmware(UInt16 vendorId, UInt16 productId, OSSt
         configuredData = OSDynamicCast(OSData, firmwares->getObject(firmwareKey));
         
         if (configuredData)
+        {
+            configuredData->retain();
             AlwaysLog("Retrieved firmware \"%s\" from internal configuration.\n", firmwareKey->getCStringNoCopy());
+        }
     }
         
     if (!configuredData)
@@ -449,6 +459,7 @@ OSArray* BrcmFirmwareStore::loadFirmware(UInt16 vendorId, UInt16 productId, OSSt
     
     if (!firmwareData)
     {
+        configuredData->release();
         AlwaysLog("Failed to decompress firmware.\n");
         return NULL;
     }
@@ -457,6 +468,8 @@ OSArray* BrcmFirmwareStore::loadFirmware(UInt16 vendorId, UInt16 productId, OSSt
         AlwaysLog("Decompressed firmware (%d bytes --> %d bytes).\n", configuredData->getLength(), firmwareData->getLength());
     else
         AlwaysLog("Non-compressed firmware.\n");
+
+    configuredData->release();
     
     OSArray* instructions = parseFirmware(firmwareData);
     firmwareData->release();
@@ -482,6 +495,7 @@ OSArray* BrcmFirmwareStore::getFirmware(UInt16 vendorId, UInt16 productId, OSStr
         return NULL;
     }
     
+    IOLockLock(mDataLock);
     OSArray* instructions = OSDynamicCast(OSArray, mFirmwares->getObject(firmwareKey));
     
     // Cached instructions found for firmwareKey?
@@ -498,7 +512,9 @@ OSArray* BrcmFirmwareStore::getFirmware(UInt16 vendorId, UInt16 productId, OSStr
         }
     }
     else
-     DebugLog("Retrieved cached firmware for \"%s\".\n", firmwareKey->getCStringNoCopy());
+        DebugLog("Retrieved cached firmware for \"%s\".\n", firmwareKey->getCStringNoCopy());
+
+    IOLockUnlock(mDataLock);
     
     return instructions;
 }

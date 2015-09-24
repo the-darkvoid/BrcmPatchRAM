@@ -2,8 +2,8 @@
 
 # use BrcmPatchRAM.kext on 10.10 and prior
 # use BrcmPatchRAM2.kext on 10.11 and later
-OSXVER=$(shell if [[ "`sw_vers -productVersion`" == 10.11* ]]; then echo 10.11+; else echo 10.10-; fi)
-ifeq "$(OSXVER)" "10.10-" 
+VERSION_ERA=$(shell ./print_version.sh)
+ifeq "$(VERSION_ERA)" "10.10-"
 KEXT=BrcmPatchRAM.kext
 else
 KEXT=BrcmPatchRAM2.kext
