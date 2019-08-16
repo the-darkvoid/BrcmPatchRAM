@@ -1,14 +1,14 @@
-###BrcmPatchRAM -- RehabMan fork
+### BrcmPatchRAM -- RehabMan fork
 
 For the most part this fork is kept in sync with the-darkvoid's verson.  We are working together to improve the project.
 
 
-###RehabMan Fork Downloads
+### RehabMan Fork Downloads
 
 Builds are available on bitbucket: https://bitbucket.org/RehabMan/os-x-brcmpatchram/downloads/
 
 
-###Installation
+### Installation
 
 Install one of BrcmPatchRAM.kext or BrcmPatchRAM2.kext depending on OS X version, never both.
 
@@ -18,7 +18,7 @@ Install one of BrcmPatchRAM.kext or BrcmPatchRAM2.kext depending on OS X version
 
 Also, install one firmware kext BrcmFirmwareData.kext or BrcmFirmwareRepo.kext, depending on installation location, never both.
 
-  * BrcmFirmwareRepo.kext: Install to /System/Library/Extensions.  This kext is much more memory efficient than BrcmFirmwareData.kext and is the preferred configuration.
+  * BrcmFirmwareRepo.kext: Install to /System/Library/Extensions (/Library/Extensions on 10.11 and later).  This kext is much more memory efficient than BrcmFirmwareData.kext and is the preferred configuration.
 
   * BrcmFirmwareData.kext: Most appropriate for EFI/Clover/kexts.  BrcmFirmwareRepo.kext, while much more memory efficient, cannot be injected as can BrcmFirmwareData.kext
 
@@ -31,7 +31,7 @@ Also, if you have a non-PatchRAM device (or you're not sure), install one of Brc
   * BrcmNonPatchRAM2.kext: for 10.11 or later.
 
 
-###BrcmPatchRAM
+### BrcmPatchRAM
 
 __Note if you have an Apple MacBook/iMac/Mac Pro etc, follow the [Mac instructions](https://github.com/RehabMan/OS-X-BrcmPatchRAM/blob/master/README-Mac.md)__
 
@@ -50,7 +50,7 @@ The firmware applied is extracted from the Windows drivers and the functionality
 Note that the original Apple Broadcom bluetooth devices are not RAMUSB devices, and thus do not have the same firmware mechanism.
 
 
-###BrcmBluetoothInjector.kext
+### BrcmBluetoothInjector.kext
 
 To be used for OS X 10.11 or newer.
 
@@ -61,7 +61,7 @@ Do not use any of the other kexts (BrcmPatchRAM, BrcmPatchRAM2, BrcmFirmwareRepo
 This kext is not provided in the distribution ZIP.  You can build it if you wish to try it.  It was removed as it presense was causing confusion for those that don't read carefully and didn't install the preferred kexts correctly.  It is not currently being updated with new devices.  If yours is not present, edit the Info.plist as needed.
 
 
-####Supported Devices
+#### Supported Devices
 
 BrcmPatchRAM supports any Broadcom USB bluetooth device based on the BCM20702 chipset (possibly other chipsets are supported also, but this has not been tested).
 
@@ -98,6 +98,7 @@ Tested PatchRAM devices:
   * ``[0a5c:21fb]`` HP Supra 4352 (20702A1 Combo)
   * ``[0a5c:21fd]`` Broadcom 4352Z
   * ``[0a5c:22be]`` Broadcom BCM20702 Bluetooth 4.0 USB Device
+  * ``[0a5c:6410]`` Dell Wireless 1830 Bluetooth 4.1 LE
   * ``[0b05:17cb]`` Asus BT-400 (20702 stand-alone) *
   * ``[0b05:17cf]`` Asus (4352/20702A1 combo) *
   * ``[0b05:180a]`` Azurewave (4360/20702 combo)
@@ -112,9 +113,9 @@ Tested PatchRAM devices:
 All of the firmwares from the Windows package are present in the kext and automatically associated with their vendor/device-ids.  They are expected to work, but have not been confirmed.  If you can confirm a working device not listed above, please notify via the "issues" database on github.
 
 
-####More Installation Details
+#### More Installation Details
 
-BrcmPatchRAM.kext and BrcmPatchRAM2.kext can be installed either through Clover kext injection or placed in /System/Library/Extensions.
+BrcmPatchRAM.kext and BrcmPatchRAM2.kext can be installed either through Clover kext injection or placed in /System/Library/Extensions (/Library/Extensions on 10.11 and later).
 Install only one, not both, depending on system version.
 
 BrcmFirmwareRepo.kext does not work with Clover kext injection, unless using a device specific firmware injector.
@@ -125,7 +126,28 @@ You can also use a device specific firmware injector (in conjunction with BrcmFi
 You will find device specfic injectors in the 'firmwares' directory of the git repository.  They are not included in the distribution ZIP.
 
 
-####Details
+#### Configuration
+
+There are a number of delays which can be changed with the following kernel flags. You might change these values if you find BrcmPatchRAM is hanging during firmware load.
+
+bpr_probedelay: Changes mProbeDelay.  Default value is 0.
+
+bpr_initialdelay: Changes mInitialDelay.  Default value is 100.
+
+bpr_preresetdelay: Changes mPreResetDelay.  Default value is 20.
+
+bpr_postresetdelay: Changes mPostResetDelay.  Default value is 100.
+
+Refer to the source for futher details on these delays.
+
+Example,... to change mPostResetDelay to 400ms, use kernel flag: bpr_postresetdelay=400.
+
+Note: In Clover, kernel flags are specified at config.plist/Boot/Arguments, or you can change them (temporarily for next boot) in Clover Options within the Clover GUI.
+
+Note: Some with the typical "wake from sleep" problems are reporting success with: bpr_probedelay=100 bpr_initialdelay=300 bpr_postresetdelay=300.  Or slightly longer delays: bpr_probedelay=200 bpr_initialdelay=400 bpr_postresetdelay=400.
+
+
+#### Details
 
 BrcmPatchRAM consists of 2 parts:
 
@@ -177,7 +199,7 @@ The patch for 10.11 is:
 ```
 
 
-####Troubleshooting
+#### Troubleshooting
 
 After installing BrcmPatchRAM, even though your Bluetooth icon may show up, it could be that the firmware has not been properly updated.
 
@@ -201,7 +223,7 @@ In order to report an error log an issue on github with the following informatio
  * Dump of BrcmPatchRAM debug output from /var/log/system.log showing the firmware upload failure
 
 
-####Firmware Compatibility
+#### Firmware Compatibility
 
 Some USB devices are very firmware specific and trying to upload any other firmware for the same chipset into them will fail.
 
@@ -221,7 +243,7 @@ The errors in between mean the firmware was not uploaded successfully, and the d
 For other devices the newest firmware available (even though not specified specifically in the Windows drivers) works fine.
 
 
-####New devices
+#### New devices
 
 In order to support a new device, the firmware for the device needs to be extracted from existing Windows drivers.
 
