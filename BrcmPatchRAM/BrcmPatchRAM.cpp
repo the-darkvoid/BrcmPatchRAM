@@ -1293,7 +1293,12 @@ bool BrcmPatchRAM::performUpgrade()
 
             case kFirmwareWritten:
                 IOSleep(mPreResetDelay);
-                hciCommand(&HCI_RESET, sizeof(HCI_RESET));
+
+                if (hciCommand(&HCI_RESET, sizeof(HCI_RESET)) != kIOReturnSuccess){
+                    DebugLog("HCI_RESET failed, aborting.");
+                    mDeviceState = kUpdateAborted;
+                    continue;
+                }
                 break;
 
             case kResetComplete:
